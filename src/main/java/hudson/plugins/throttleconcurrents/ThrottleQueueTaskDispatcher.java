@@ -41,8 +41,6 @@ public class ThrottleQueueTaskDispatcher extends QueueTaskDispatcher {
             CauseOfBlockage cause = canRun(task, tjp);
             if (cause != null) return cause;
 
-            clearStartLogOf(task);
-
             if (tjp.getThrottleOption().equals("project")) {
                 if (tjp.getMaxConcurrentPerNode().intValue() > 0) {
                     int maxConcurrentPerNode = tjp.getMaxConcurrentPerNode().intValue();
@@ -211,7 +209,6 @@ public class ThrottleQueueTaskDispatcher extends QueueTaskDispatcher {
             }
         }
 
-        logStartOf(task);
         return null;
     }
 
