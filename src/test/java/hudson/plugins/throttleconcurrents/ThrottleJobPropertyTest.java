@@ -21,11 +21,11 @@ public class ThrottleJobPropertyTest extends HudsonTestCase {
         String alpha = "alpha", beta = "beta", gamma = "gamma"; // category names
         FreeStyleProject p1 = createFreeStyleProject("p1");
         FreeStyleProject p2 = createFreeStyleProject("p2");
-        p2.addProperty(new ThrottleJobProperty(1, 1, Arrays.asList(alpha), false, THROTTLE_OPTION_CATEGORY, ThrottleMatrixProjectOptions.DEFAULT));
+        p2.addProperty(new ThrottleJobProperty(0L, 1, 1, Arrays.asList(alpha), false, THROTTLE_OPTION_CATEGORY, ThrottleMatrixProjectOptions.DEFAULT));
         FreeStyleProject p3 = createFreeStyleProject("p3");
-        p3.addProperty(new ThrottleJobProperty(1, 1, Arrays.asList(alpha, beta), true, THROTTLE_OPTION_CATEGORY, ThrottleMatrixProjectOptions.DEFAULT));
+        p3.addProperty(new ThrottleJobProperty(0L, 1, 1, Arrays.asList(alpha, beta), true, THROTTLE_OPTION_CATEGORY, ThrottleMatrixProjectOptions.DEFAULT));
         FreeStyleProject p4 = createFreeStyleProject("p4");
-        p4.addProperty(new ThrottleJobProperty(1, 1, Arrays.asList(beta, gamma), true, THROTTLE_OPTION_CATEGORY, ThrottleMatrixProjectOptions.DEFAULT));
+        p4.addProperty(new ThrottleJobProperty(0L, 1, 1, Arrays.asList(beta, gamma), true, THROTTLE_OPTION_CATEGORY, ThrottleMatrixProjectOptions.DEFAULT));
         // TODO when core dep ≥1.480.3, add cloudbees-folder as a test dependency so we can check jobs inside folders
         assertProjects(alpha, p3);
         assertProjects(beta, p3, p4);
@@ -44,22 +44,25 @@ public class ThrottleJobPropertyTest extends HudsonTestCase {
 
 
     public void testToString_withNulls(){
-        ThrottleJobProperty tjp = new ThrottleJobProperty(0,0, null, false, null, ThrottleMatrixProjectOptions.DEFAULT);
+        ThrottleJobProperty tjp = new ThrottleJobProperty(0L, 0,0, null, false, null, ThrottleMatrixProjectOptions.DEFAULT);
         assertNotNull(tjp.toString());
     }
 
     public void testThrottleJob_constructor_should_store_arguments() {
+        Long expectedDelay = anyLong();
         Integer expectedMaxConcurrentPerNode = anyInt();
         Integer expectedMaxConcurrentTotal = anyInt();
         List<String> expectedCategories = Collections.emptyList();
         boolean expectedThrottleEnabled = anyBoolean();
         String expectedThrottleOption = anyString();
 
-        ThrottleJobProperty property = new ThrottleJobProperty(expectedMaxConcurrentPerNode,
+        ThrottleJobProperty property = new ThrottleJobProperty(expectedDelay,
+                expectedMaxConcurrentPerNode,
                 expectedMaxConcurrentTotal,
                 expectedCategories, expectedThrottleEnabled, expectedThrottleOption,
                 ThrottleMatrixProjectOptions.DEFAULT);
 
+        assertEquals(expectedDelay, property.getDelay());
         assertEquals(expectedMaxConcurrentPerNode, property.getMaxConcurrentPerNode());
         assertEquals(expectedMaxConcurrentTotal, property.getMaxConcurrentTotal());
         assertEquals(expectedCategories, property.getCategories());
@@ -74,7 +77,8 @@ public class ThrottleJobPropertyTest extends HudsonTestCase {
             add(category);
         }};
 
-        ThrottleJobProperty property = new ThrottleJobProperty(anyInt(),
+        ThrottleJobProperty property = new ThrottleJobProperty(anyLong(),
+                anyInt(),
                 anyInt(),
                 unsafeList,
                 anyBoolean(),
@@ -89,7 +93,8 @@ public class ThrottleJobPropertyTest extends HudsonTestCase {
     }
 
     public void testThrottleJob_constructor_handles_null_categories(){
-        ThrottleJobProperty property = new ThrottleJobProperty(anyInt(),
+        ThrottleJobProperty property = new ThrottleJobProperty(anyLong(),
+                anyInt(),
                 anyInt(),
                 null,
                 anyBoolean(),
@@ -156,4 +161,7 @@ public class ThrottleJobPropertyTest extends HudsonTestCase {
         return random.nextInt(10000);
     }
 
+    private long anyLong() {
+        return random.nextInt(10000);
+    }
 }

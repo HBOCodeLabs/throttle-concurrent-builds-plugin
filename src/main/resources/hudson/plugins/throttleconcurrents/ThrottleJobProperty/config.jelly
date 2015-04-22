@@ -12,6 +12,10 @@
               title="${%Throttle this project as part of one or more categories}" value="category"/>
     </f:entry>
 
+    <f:entry title="${%Delay}"
+             field="delay">
+      <f:textbox />
+    </f:entry>
     <f:entry title="${%Maximum Total Concurrent Builds}"
              field="maxConcurrentTotal">
       <f:textbox />

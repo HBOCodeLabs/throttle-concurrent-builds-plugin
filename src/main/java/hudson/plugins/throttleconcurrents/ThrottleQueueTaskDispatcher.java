@@ -14,6 +14,7 @@ import hudson.model.labels.LabelAtom;
 import hudson.model.queue.CauseOfBlockage;
 import hudson.model.queue.QueueTaskDispatcher;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.logging.Level;
@@ -24,11 +25,13 @@ import javax.annotation.Nonnull;
 @Extension
 public class ThrottleQueueTaskDispatcher extends QueueTaskDispatcher {
 
+    private HashMap<String,Long> lastStarts = new HashMap<String,Long>();
+
     @Override
     public CauseOfBlockage canTake(Node node, Task task) {
-        
+
         ThrottleJobProperty tjp = getThrottleJobProperty(task);
-        
+
         // Handle multi-configuration filters
         if (!shouldBeThrottled(task, tjp)) {
             return null;
@@ -37,6 +40,8 @@ public class ThrottleQueueTaskDispatcher extends QueueTaskDispatcher {
         if (tjp!=null && tjp.getThrottleEnabled()) {
             CauseOfBlockage cause = canRun(task, tjp);
             if (cause != null) return cause;
+
+            clearStartLogOf(task);
 
             if (tjp.getThrottleOption().equals("project")) {
                 if (tjp.getMaxConcurrentPerNode().intValue() > 0) {
@@ -83,6 +88,8 @@ public class ThrottleQueueTaskDispatcher extends QueueTaskDispatcher {
                     }
                 }
             }
+
+            logStartOf(task);
         }
 
         return null;
@@ -96,36 +103,65 @@ public class ThrottleQueueTaskDispatcher extends QueueTaskDispatcher {
         }
         return null;
     }
-    
+
     @Nonnull
     private ThrottleMatrixProjectOptions getMatrixOptions(Task task) {
         ThrottleJobProperty tjp = getThrottleJobProperty(task);
-        if (tjp == null) return ThrottleMatrixProjectOptions.DEFAULT;       
+        if (tjp == null) return ThrottleMatrixProjectOptions.DEFAULT;
         ThrottleMatrixProjectOptions matrixOptions = tjp.getMatrixOptions();
         return matrixOptions != null ? matrixOptions : ThrottleMatrixProjectOptions.DEFAULT;
     }
-    
+
     private boolean shouldBeThrottled(@Nonnull Task task, @CheckForNull ThrottleJobProperty tjp) {
        if (tjp == null) return false;
        if (!tjp.getThrottleEnabled()) return false;
-       
+
        // Handle matrix options
        ThrottleMatrixProjectOptions matrixOptions = tjp.getMatrixOptions();
        if (matrixOptions == null) matrixOptions = ThrottleMatrixProjectOptions.DEFAULT;
        if (!matrixOptions.isThrottleMatrixConfigurations() && task instanceof MatrixConfiguration) {
             return false;
-       } 
+       }
        if (!matrixOptions.isThrottleMatrixBuilds()&& task instanceof MatrixProject) {
             return false;
        }
-       
+
        // Allow throttling by default
        return true;
+    }
+
+    private boolean shouldDelay(@Nonnull Task task, @CheckForNull ThrottleJobProperty tjp) {
+        if (tjp.getDelay() > 0) {
+            Long lastStart = lastStarts.get(task.getDisplayName());
+
+            if (lastStart != null) {
+                long delta = System.currentTimeMillis() - lastStart;
+
+                if (delta < tjp.getDelay()) {
+                    return true;
+                }
+
+                clearStartLogOf(task);
+            }
+        }
+
+        return false;
+    }
+
+    private void clearStartLogOf(@Nonnull Task task) {
+        lastStarts.remove(task.getDisplayName());
+    }
+
+    private void logStartOf(@Nonnull Task task) {
+        lastStarts.put(task.getDisplayName(), System.currentTimeMillis());
     }
 
     public CauseOfBlockage canRun(Task task, ThrottleJobProperty tjp) {
         if (!shouldBeThrottled(task, tjp)) {
             return null;
+        }
+        if (shouldDelay(task, tjp)) {
+            return CauseOfBlockage.fromMessage(Messages._ThrottleQueueTaskDispatcher_Delayed());
         }
         if (Hudson.getInstance().getQueue().isPending(task)) {
             return CauseOfBlockage.fromMessage(Messages._ThrottleQueueTaskDispatcher_BuildPending());
@@ -175,6 +211,7 @@ public class ThrottleQueueTaskDispatcher extends QueueTaskDispatcher {
             }
         }
 
+        logStartOf(task);
         return null;
     }
 
