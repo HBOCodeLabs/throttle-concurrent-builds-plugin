@@ -158,9 +158,6 @@ public class ThrottleQueueTaskDispatcher extends QueueTaskDispatcher {
         if (!shouldBeThrottled(task, tjp)) {
             return null;
         }
-        if (shouldDelay(task, tjp)) {
-            return CauseOfBlockage.fromMessage(Messages._ThrottleQueueTaskDispatcher_Delayed());
-        }
         if (Hudson.getInstance().getQueue().isPending(task)) {
             return CauseOfBlockage.fromMessage(Messages._ThrottleQueueTaskDispatcher_BuildPending());
         }
@@ -209,6 +206,10 @@ public class ThrottleQueueTaskDispatcher extends QueueTaskDispatcher {
             }
         }
 
+        if (shouldDelay(task, tjp)) {
+            return CauseOfBlockage.fromMessage(Messages._ThrottleQueueTaskDispatcher_Delayed());
+        }
+        
         return null;
     }
 
