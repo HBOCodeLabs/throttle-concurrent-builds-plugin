@@ -62,7 +62,7 @@ public class ThrottleJobProperty extends JobProperty<AbstractProject<?,?>> {
                                String throttleOption,
                                @CheckForNull ThrottleMatrixProjectOptions matrixOptions
                                ) {
-        this.delay = delay == null ? 0 : delay;
+        this.delay = delay == null ? 0L : delay;
         this.maxConcurrentPerNode = maxConcurrentPerNode == null ? 0 : maxConcurrentPerNode;
         this.maxConcurrentTotal = maxConcurrentTotal == null ? 0 : maxConcurrentTotal;
         this.categories = categories == null ?
@@ -127,9 +127,12 @@ public class ThrottleJobProperty extends JobProperty<AbstractProject<?,?>> {
     }
 
     public Long getDelay() {
+        if (delay == null)
+            delay = 0L;
+
         return delay;
     }
-    
+
     public boolean getThrottleEnabled() {
         return throttleEnabled;
     }
