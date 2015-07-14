@@ -14,6 +14,7 @@ import hudson.model.labels.LabelAtom;
 import hudson.model.queue.CauseOfBlockage;
 import hudson.model.queue.QueueTaskDispatcher;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.logging.Level;
@@ -24,11 +25,31 @@ import javax.annotation.Nonnull;
 @Extension
 public class ThrottleQueueTaskDispatcher extends QueueTaskDispatcher {
 
+    private class DelayedItem {
+        private final Queue.Item item;
+        private final long       started;
+
+        private DelayedItem(Queue.Item item) {
+            this.item = item;
+            started   = System.currentTimeMillis();
+        }
+
+        private long getElapsedTime() {
+            return System.currentTimeMillis() - started;
+        }
+
+        private boolean isItem(Queue.Item item) {
+            return item.getId() == this.item.getId();
+        }
+    }
+
+    private HashMap<String,DelayedItem> lastStarts = new HashMap<String,DelayedItem>();
+
     @Override
     public CauseOfBlockage canTake(Node node, Task task) {
-        
+        LOGGER.log(Level.FINE, "canTake({0}, {1}) called", new Object[] {node.getDisplayName(), task.getDisplayName()});
         ThrottleJobProperty tjp = getThrottleJobProperty(task);
-        
+
         // Handle multi-configuration filters
         if (!shouldBeThrottled(task, tjp)) {
             return null;
@@ -90,40 +111,97 @@ public class ThrottleQueueTaskDispatcher extends QueueTaskDispatcher {
 
     // @Override on jenkins 4.127+ , but still compatible with 1.399
     public CauseOfBlockage canRun(Queue.Item item) {
+        LOGGER.log(Level.FINE, "canRun({0}) called", new Object[]{item});
         ThrottleJobProperty tjp = getThrottleJobProperty(item.task);
         if (tjp!=null && tjp.getThrottleEnabled()) {
-            return canRun(item.task, tjp);
+            CauseOfBlockage cause = canRun(item.task, tjp);
+
+            if (cause != null) {
+                return cause;
+            }
+
+            return delay(item);
         }
         return null;
     }
-    
+
     @Nonnull
     private ThrottleMatrixProjectOptions getMatrixOptions(Task task) {
         ThrottleJobProperty tjp = getThrottleJobProperty(task);
-        if (tjp == null) return ThrottleMatrixProjectOptions.DEFAULT;       
+        if (tjp == null) return ThrottleMatrixProjectOptions.DEFAULT;
         ThrottleMatrixProjectOptions matrixOptions = tjp.getMatrixOptions();
         return matrixOptions != null ? matrixOptions : ThrottleMatrixProjectOptions.DEFAULT;
     }
-    
+
     private boolean shouldBeThrottled(@Nonnull Task task, @CheckForNull ThrottleJobProperty tjp) {
        if (tjp == null) return false;
        if (!tjp.getThrottleEnabled()) return false;
-       
+
        // Handle matrix options
        ThrottleMatrixProjectOptions matrixOptions = tjp.getMatrixOptions();
        if (matrixOptions == null) matrixOptions = ThrottleMatrixProjectOptions.DEFAULT;
        if (!matrixOptions.isThrottleMatrixConfigurations() && task instanceof MatrixConfiguration) {
             return false;
-       } 
+       }
        if (!matrixOptions.isThrottleMatrixBuilds()&& task instanceof MatrixProject) {
             return false;
        }
-       
+
        // Allow throttling by default
        return true;
     }
 
+    private boolean shouldDelay(Queue.Item item) {
+        LOGGER.log(Level.FINE, "shouldDelay({0}) called", new Object[]{item});
+
+        ThrottleJobProperty tjp = getThrottleJobProperty(item.task);
+
+        if (tjp.getDelay() > 0) {
+            DelayedItem lastStart = lastStarts.get(item.task.getDisplayName());
+
+            if (lastStart != null) {
+                if (lastStart.isItem(item)) {
+                    LOGGER.log(Level.FINE, "already said OK to {0}", new Object[]{item});
+                    return false;
+                }
+
+                long elapsedTime = lastStart.getElapsedTime();
+                LOGGER.log(Level.FINE, "{0} started {1} ms ago", new Object[]{item, elapsedTime});
+
+                if (elapsedTime < tjp.getDelay()) {
+                    LOGGER.log(Level.FINE, "shouldDelay({0}) is delaying", new Object[]{item});
+                    return true;
+                }
+
+                lastStarts.remove(item.task.getDisplayName());
+            }
+
+            LOGGER.log(Level.FINE, "{0} not started recently", new Object[]{item.task.getDisplayName()});
+        }
+
+        LOGGER.log(Level.FINE, "shouldDelay({0}) is not delaying", new Object[]{item});
+        return false;
+    }
+
+    private void logStartOf(Queue.Item item) {
+        DelayedItem currentDelay = lastStarts.get(item.task.getDisplayName());
+
+        if (currentDelay == null || !currentDelay.isItem(item)) {
+            lastStarts.put(item.task.getDisplayName(), new DelayedItem(item));
+        }
+    }
+
+    private CauseOfBlockage delay(Queue.Item item) {
+        if (shouldDelay(item)) {
+            return CauseOfBlockage.fromMessage(Messages._ThrottleQueueTaskDispatcher_Delayed());
+        }
+
+        logStartOf(item);
+        return null;
+    }
+
     public CauseOfBlockage canRun(Task task, ThrottleJobProperty tjp) {
+        LOGGER.log(Level.FINE, "canRun({0}, tjp) called", new Object[]{task.getDisplayName()});
         if (!shouldBeThrottled(task, tjp)) {
             return null;
         }
